@@ -1,150 +1,156 @@
 // User routes
 const express = require("express");
 const router = express.Router();
-const User = require("./../models/User");
+const User = require("../models/User");
+const multer = require("multer");
+const sharp = require("sharp");
+const path = require("path");
+const verifyToken = require("../middleware/verifyToken");
+const Utils = require("../Utils");
 
-// GET - get all users----------------------------------------------------
-// endpoint: /user
-router.get("/", (req, res) => {
-  // get all users from the User model, using the find() method
-  User.find()
-    .then((users) => {
-      res.json(users);
-    })
-    .catch((err) => {
-      console.log("problem getting users", err);
-      res.status(500).json({
-        message: "problem getting users",
-        error: err,
-      });
-    });
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, "public/uploads/"),
+  filename: (req, file, cb) =>
+    cb(null, `${req.user.user.id}-${Date.now()}.png`),
+});
+const upload = multer({ storage });
+
+// GET all users
+router.get("/", verifyToken, async (req, res) => {
+  try {
+    if (req.user.user.accessLevel !== 2) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+    const users = await User.find().select("-password");
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ message: "Problem getting users", error: err });
+  }
 });
 
-// GET - get a single user by id------------------------------------------
-// endpoint = /user/:id
-// Charlie Chaplin id = 67d5b7a4a40430524cfe0a63
-router.get("/:id", (req, res) => {
-  // use the User model to find one user by id
-  User.findById(req.params.id)
-    .then((user) => {
-      if (!user) {
-        res.status(404).json({
-          message: "User doesn't exist",
-        });
-      } else {
-        res.json(user);
-      }
-    })
-    .catch((err) => {
-      console.log("error getting user", err);
-      res.status(500).json({
-        message: "problem getting user",
-        error: err,
-      });
-    });
+// GET single user
+router.get("/:id", verifyToken, async (req, res) => {
+  try {
+    if (req.user.user.id !== req.params.id && req.user.user.accessLevel !== 2) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+    const user = await User.findById(req.params.id).select("-password");
+    if (!user) {
+      return res.status(404).json({ message: "User doesn't exist" });
+    }
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ message: "Problem getting user", error: err });
+  }
 });
 
-// POST - create a new user-----------------------------------------------
-// endpoint = /user
-router.post("/", (req, res) => {
-  // check if the req.body is empty, if so - send back error
-  if (!req.body) {
-    return res.status(400).json({
-      message: "User content is empty!",
-    });
+// POST create user
+router.post("/", async (req, res) => {
+  if (
+    !req.body.firstName ||
+    !req.body.lastName ||
+    !req.body.email ||
+    !req.body.password ||
+    !req.body.accessLevel
+  ) {
+    return res.status(400).json({ message: "All fields are required" });
   }
 
-  User.findOne({ email: req.body.email })
-    .then((user) => {
-      if (user != null) {
-        return res.status(400).json({
-          message: "Email already in use",
-        });
-      }
+  try {
+    const existingUser = await User.findOne({ email: req.body.email });
+    if (existingUser) {
+      return res.status(400).json({ message: "Email already in use" });
+    }
 
-      // create a new user using the User model
-      const newUser = new User({
-        firstName: req.body.firstName,
-        lastName: req.body.lastName,
-        email: req.body.email,
-        accessLevel: req.body.accessLevel,
-        password: req.body.password,
-      });
-
-      // save newUser document to the database
-      newUser
-        .save()
-        .then((user) => {
-          // send back 201 status and user object
-          res.status(201).json(user);
-        })
-        .catch((err) => {
-          console.log("error creating user", err);
-          // send back 500 status with error message
-          res.status(500).json({
-            message: "problem creating user",
-            error: err,
-          });
-        });
-    })
-    .catch((err) => {
-      console.log(err);
-      res.status(500).json({
-        message: "Problem creating account",
-        error: err,
-      });
+    const newUser = new User({
+      firstName: req.body.firstName,
+      lastName: req.body.lastName,
+      email: req.body.email,
+      accessLevel: req.body.accessLevel,
+      password: req.body.password,
     });
+
+    const savedUser = await newUser.save();
+    res.status(201).json(savedUser);
+  } catch (err) {
+    res.status(500).json({ message: "Problem creating user", error: err });
+  }
 });
 
-// PUT - update a user by id-------------------------------------------------
-// endpoint = /user/:id
-router.put("/:id", (req, res) => {
-  // check if the req.body is empty, if so - send back error
-  if (!req.body) {
-    return res.status(400).json({
-      message: "User content is empty!",
-    });
+// PUT update user
+router.put("/:id", verifyToken, async (req, res) => {
+  if (req.user.user.id !== req.params.id) {
+    return res.status(403).json({ message: "Access denied" });
   }
 
-  // update user using the User model
-  User.findByIdAndUpdate(req.params.id, req.body, { new: true })
-    .then((user) => {
+  try {
+    const updates = {
+      firstName: req.body.firstName,
+      lastName: req.body.lastName,
+      email: req.body.email,
+      bio: req.body.bio,
+    };
+
+    if (req.body.password) {
+      updates.password = await Utils.hashPassword(req.body.password);
+    }
+
+    const user = await User.findByIdAndUpdate(req.params.id, updates, {
+      new: true,
+    }).select("-password");
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ message: "Problem updating user", error: err });
+  }
+});
+
+// POST upload avatar
+router.post(
+  "/:id/avatar",
+  verifyToken,
+  upload.single("avatar"),
+  async (req, res) => {
+    if (req.user.user.id !== req.params.id) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    try {
+      const buffer = await sharp(req.file.path)
+        .resize(200, 200)
+        .png()
+        .toBuffer();
+      await sharp(buffer).toFile(req.file.path);
+      const avatarUrl = `/uploads/${req.file.filename}`;
+      const user = await User.findByIdAndUpdate(
+        req.params.id,
+        { avatar: avatarUrl },
+        { new: true }
+      ).select("-password");
       res.json(user);
-    })
-    .catch((err) => {
-      console.log("error updating user", err);
-      res.status(500).json({
-        message: "problem updating user",
-        error: err,
-      });
-    });
-});
+    } catch (err) {
+      res.status(500).json({ message: "Problem uploading avatar", error: err });
+    }
+  }
+);
 
-// DELETE - delete a user by id----------------------------------------
-// endpoint = /user/:id
-router.delete("/:id", (req, res) => {
-  // validate the request (make sure id isn't missing)
-  if (!req.params.id) {
-    return res.status(400).json({
-      message: "User id is missing!",
-    });
+// DELETE user
+router.delete("/:id", verifyToken, async (req, res) => {
+  if (req.user.user.id !== req.params.id && req.user.user.accessLevel !== 2) {
+    return res.status(403).json({ message: "Access denied" });
   }
 
-  // delete the user using the User model
-  User.findByIdAndDelete({ _id: req.params.id })
-    .then(() => {
-      res.json({
-        message: "User deleted",
-      });
-    })
-    .catch((err) => {
-      console.log("error deleting user", err);
-      res.status(500).json({
-        message: "problem deleting user",
-        error: err,
-      });
-    });
+  try {
+    const user = await User.findByIdAndDelete(req.params.id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    res.json({ message: "User deleted" });
+  } catch (err) {
+    res.status(500).json({ message: "Problem deleting user", error: err });
+  }
 });
 
-// export
 module.exports = router;
