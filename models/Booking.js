@@ -1,40 +1,38 @@
+// models/Booking.js
+
 const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
 
-const eventSchema = new mongoose.Schema(
+const bookingSchema = new mongoose.Schema(
   {
-    title: {
-      type: String,
+    event: {
+      type: Schema.Types.ObjectId,
+      ref: "Event",
       required: true,
     },
-    description: {
-      type: String,
-      required: true,
-    },
-    date: {
-      type: Date,
-      required: true,
-    },
-    location: {
-      type: String,
-      required: true,
-    },
-    image: {
-      type: String,
-      default: "/images/default-event.png",
-    },
-    host: {
+    guest: {
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
-    seatsAvailable: {
-      type: Number,
-      required: true,
-      min: 0,
+    status: {
+      type: String,
+      enum: ["confirmed", "cancelled"],
+      default: "confirmed",
+    },
+    hostNotes: {
+      type: String,
+      default: "",
+    },
+    guestNotes: {
+      type: String,
+      default: "",
     },
   },
   { timestamps: true }
 );
 
-module.exports = mongoose.model("Event", eventSchema);
+// Ensure indexes for efficient queries
+bookingSchema.index({ event: 1, guest: 1 }, { unique: true });
+
+module.exports = mongoose.model("Booking", bookingSchema);

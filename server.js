@@ -8,6 +8,7 @@ const authRoutes = require("./routes/auth");
 const userRoutes = require("./routes/users");
 const eventRoutes = require("./routes/events");
 const bookingRoutes = require("./routes/bookings");
+const { User, Event, Booking } = require("./models");
 
 const app = express();
 

@@ -1,4 +1,6 @@
-const bcrypt = require("bcrypt");
+// Utils.js
+
+const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
 class Utils {
