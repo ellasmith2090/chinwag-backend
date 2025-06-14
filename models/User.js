@@ -3,9 +3,8 @@
 const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
 require("mongoose-type-email");
-const Utils = require("./../Utils");
+const Utils = require("../Utils");
 
-// User Schema Definition-------------------------------------------
 const userSchema = new mongoose.Schema(
   {
     firstName: {
@@ -24,8 +23,8 @@ const userSchema = new mongoose.Schema(
     accessLevel: {
       type: Number,
       required: true,
-      enum: [1, 2], // Only 1 (regular user) or 2 (admin) allowed
-      default: 1, // Default to regular user
+      enum: [1, 2],
+      default: 1,
     },
     password: {
       type: String,
@@ -35,20 +34,23 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    avatar: {
+      type: String,
+      default: "/images/default-avatar.png", // Static default image
+    },
+    isFirstLogin: {
+      type: Boolean,
+      default: true,
+    },
   },
   { timestamps: true }
-); // Automatically add createdAt and updatedAt fields
+);
 
-// Middleware to Hash Password Before Saving------------------------
-userSchema.pre("save", function (next) {
-  // Check if password is present and is modified
-  if (this.password && this.isModified()) {
-    // Replace original password with the new hashed password
-    this.password = Utils.hashPassword(this.password);
+userSchema.pre("save", async function (next) {
+  if (this.isModified("password")) {
+    this.password = await Utils.hashPassword(this.password);
   }
   next();
 });
 
-// Create and Export Mongoose Model----------------------------------
-const userModel = mongoose.model("User", userSchema);
-module.exports = userModel;
+module.exports = mongoose.model("User", userSchema);
