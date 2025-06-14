@@ -2,55 +2,41 @@
 
 const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
-require("mongoose-type-email");
-const Utils = require("../Utils");
 
-const userSchema = new mongoose.Schema(
+const eventSchema = new mongoose.Schema(
   {
-    firstName: {
+    title: {
       type: String,
       required: true,
     },
-    lastName: {
+    description: {
       type: String,
       required: true,
     },
-    email: {
-      type: mongoose.SchemaTypes.Email,
+    date: {
+      type: Date,
       required: true,
-      unique: true,
     },
-    accessLevel: {
+    location: {
+      type: String,
+      required: true,
+    },
+    image: {
+      type: String,
+      default: "/images/default-event.png",
+    },
+    host: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    seatsAvailable: {
       type: Number,
       required: true,
-      enum: [1, 2],
-      default: 1,
-    },
-    password: {
-      type: String,
-      required: true,
-    },
-    bio: {
-      type: String,
-      default: "",
-    },
-    avatar: {
-      type: String,
-      default: "/images/default-avatar.png", // Static default image
-    },
-    isFirstLogin: {
-      type: Boolean,
-      default: true,
+      min: 0,
     },
   },
   { timestamps: true }
 );
 
-userSchema.pre("save", async function (next) {
-  if (this.isModified("password")) {
-    this.password = await Utils.hashPassword(this.password);
-  }
-  next();
-});
-
-module.exports = mongoose.model("User", userSchema);
+module.exports = mongoose.model("Event", eventSchema);

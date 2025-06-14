@@ -17,6 +17,9 @@ router.post("/", verifyToken, async (req, res) => {
     if (!event) {
       return res.status(404).json({ message: "Event not found" });
     }
+    if (event.seatsAvailable <= 0) {
+      return res.status(400).json({ message: "No seats available" });
+    }
 
     const existingBooking = await Booking.findOne({
       event: req.body.eventId,
@@ -32,6 +35,9 @@ router.post("/", verifyToken, async (req, res) => {
     });
 
     const savedBooking = await newBooking.save();
+    await Event.findByIdAndUpdate(req.body.eventId, {
+      $inc: { seatsAvailable: -1 },
+    });
     res.status(201).json(savedBooking);
   } catch (err) {
     res.status(500).json({ message: "Problem creating booking", error: err });
@@ -75,7 +81,7 @@ router.get("/host", verifyToken, async (req, res) => {
 // PUT cancel booking
 router.put("/:id/cancel", verifyToken, async (req, res) => {
   try {
-    const booking = await Booking.findById(req.params.id);
+    const booking = await Booking.findById(req.params.id).populate("event");
     if (!booking) {
       return res.status(404).json({ message: "Booking not found" });
     }
@@ -91,6 +97,11 @@ router.put("/:id/cancel", verifyToken, async (req, res) => {
 
     booking.status = "cancelled";
     const updatedBooking = await booking.save();
+    if (booking.status === "confirmed") {
+      await Event.findByIdAndUpdate(booking.event._id, {
+        $inc: { seatsAvailable: 1 },
+      });
+    }
     res.json(updatedBooking);
   } catch (err) {
     res.status(500).json({ message: "Problem cancelling booking", error: err });

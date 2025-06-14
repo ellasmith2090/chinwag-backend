@@ -14,10 +14,34 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// GET all events
+// GET all events with optional filtering
 router.get("/", async (req, res) => {
   try {
-    const events = await Event.find().populate(
+    let query = {};
+    if (req.query.host) {
+      query.host = req.query.host;
+    }
+    if (req.query.dateRange) {
+      const now = new Date();
+      if (req.query.dateRange === "weekend") {
+        const friday = new Date(now);
+        friday.setDate(now.getDate() + ((5 - now.getDay() + 7) % 7));
+        friday.setHours(0, 0, 0, 0);
+        const sunday = new Date(friday);
+        sunday.setDate(friday.getDate() + 2);
+        sunday.setHours(23, 59, 59, 999);
+        query.date = { $gte: friday, $lte: sunday };
+      } else if (req.query.dateRange === "nextWeek") {
+        const monday = new Date(now);
+        monday.setDate(now.getDate() + ((1 - now.getDay() + 7) % 7) + 7);
+        monday.setHours(0, 0, 0, 0);
+        const sunday = new Date(monday);
+        sunday.setDate(monday.getDate() + 6);
+        sunday.setHours(23, 59, 59, 999);
+        query.date = { $gte: monday, $lte: sunday };
+      }
+    }
+    const events = await Event.find(query).populate(
       "host",
       "firstName lastName avatar"
     );
@@ -56,6 +80,7 @@ router.post("/", verifyToken, upload.single("image"), async (req, res) => {
       date: req.body.date,
       location: req.body.location,
       host: req.user.user.id,
+      seatsAvailable: parseInt(req.body.seatsAvailable),
     };
 
     if (req.file) {
@@ -95,6 +120,7 @@ router.put("/:id", verifyToken, upload.single("image"), async (req, res) => {
       description: req.body.description,
       date: req.body.date,
       location: req.body.location,
+      seatsAvailable: parseInt(req.body.seatsAvailable),
     };
 
     if (req.file) {
