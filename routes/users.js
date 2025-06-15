@@ -1,4 +1,5 @@
 // routes/users.js
+
 const express = require("express");
 const router = express.Router();
 const User = require("../models/User");
@@ -42,10 +43,14 @@ router.put("/:id", verifyToken, upload.single("avatar"), async (req, res) => {
     }
 
     const updates = {
-      firstName: req.body.firstName,
-      lastName: req.body.lastName,
-      email: req.body.email,
-      bio: req.body.bio || "",
+      firstName: req.body.firstName || user.firstName,
+      lastName: req.body.lastName || user.lastName,
+      email: req.body.email || user.email,
+      bio: req.body.bio || user.bio,
+      isFirstLogin:
+        req.body.isFirstLogin !== undefined
+          ? req.body.isFirstLogin
+          : user.isFirstLogin,
     };
 
     if (req.file) {
