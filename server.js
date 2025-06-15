@@ -1,38 +1,38 @@
 // server.js
 
+require("dotenv").config();
 const express = require("express");
+const mongoose = require("mongoose");
 const cors = require("cors");
 const path = require("path");
-const connectDB = require("./config/db");
-const authRoutes = require("./routes/auth");
-const userRoutes = require("./routes/users");
-const eventRoutes = require("./routes/events");
-const bookingRoutes = require("./routes/bookings");
-const { User, Event, Booking } = require("./models");
 
 const app = express();
+const PORT = process.env.PORT || 3000;
+const MONGO_URI = process.env.MONGO_URI;
 
-// Connect to MongoDB
-connectDB();
-
-// CORS configuration
-const corsOptions = {
-  origin: ["http://localhost:1234", "https://your-netlify-app.netlify.app"],
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: true,
-};
-app.use(cors(corsOptions));
+// Log URI for debugging (mask password)
+console.log(
+  "Connecting to Mongo URI:",
+  MONGO_URI.replace(/:([^@]+)@/, ":****@")
+);
 
 // Middleware
+app.use(cors());
 app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "public/uploads")));
 
 // Routes
-app.use("/api/auth", authRoutes);
-app.use("/api/users", userRoutes);
-app.use("/api/events", eventRoutes);
-app.use("/api/bookings", bookingRoutes);
+app.use("/auth", require("./routes/auth"));
+app.use("/users", require("./routes/users"));
+app.use("/events", require("./routes/events"));
+app.use("/bookings", require("./routes/bookings"));
 
-const PORT = process.env.PORT || 3000;
+// MongoDB Connection
+mongoose.set("debug", true); // Enable debug logging
+mongoose
+  .connect(MONGO_URI)
+  .then(() => console.log("MongoDB connected"))
+  .catch((err) => console.error("❌ MongoDB connection failed:", err.message));
+
+// Start Server
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
