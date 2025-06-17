@@ -1,11 +1,11 @@
 // routes/users.js
+
 const express = require("express");
 const router = express.Router();
 const User = require("../models/User");
 const verifyToken = require("../middleware/verifyToken");
 const multer = require("multer");
 const sharp = require("sharp");
-const path = require("path");
 const Utils = require("../Utils");
 
 const storage = multer.diskStorage({
@@ -17,7 +17,7 @@ const upload = multer({ storage });
 // GET user profile
 router.get("/:id", verifyToken, async (req, res) => {
   try {
-    if (req.user.user.id !== req.params.id) {
+    if (req.user.id !== req.params.id) {
       return res.status(403).json({ message: "Access denied" });
     }
     const user = await User.findById(req.params.id).select("-password");
@@ -26,14 +26,14 @@ router.get("/:id", verifyToken, async (req, res) => {
     }
     res.json(user);
   } catch (err) {
-    res.status(500).json({ message: "Server error", error: err });
+    res.status(500).json({ message: "Server error", error: err.message });
   }
 });
 
 // PUT update user profile
 router.put("/:id", verifyToken, upload.single("avatar"), async (req, res) => {
   try {
-    if (req.user.user.id !== req.params.id) {
+    if (req.user.id !== req.params.id) {
       return res.status(403).json({ message: "Access denied" });
     }
     const user = await User.findById(req.params.id);
@@ -41,11 +41,17 @@ router.put("/:id", verifyToken, upload.single("avatar"), async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
+    const { firstName, lastName, email, password } = req.body;
+    if (!firstName || !lastName || !email) {
+      return res
+        .status(400)
+        .json({ message: "First name, last name, and email are required" });
+    }
+
     const updates = {
-      firstName: req.body.firstName || user.firstName,
-      lastName: req.body.lastName || user.lastName,
-      email: req.body.email || user.email,
-      bio: req.body.bio || user.bio,
+      firstName: firstName || user.firstName,
+      lastName: lastName || user.lastName,
+      email: email || user.email,
       isFirstLogin:
         req.body.isFirstLogin !== undefined
           ? req.body.isFirstLogin
@@ -61,8 +67,8 @@ router.put("/:id", verifyToken, upload.single("avatar"), async (req, res) => {
       updates.avatar = `/uploads/${req.file.filename}`;
     }
 
-    if (req.body.password) {
-      updates.password = await Utils.hashPassword(req.body.password);
+    if (password) {
+      updates.password = await Utils.hashPassword(password);
     }
 
     const updatedUser = await User.findByIdAndUpdate(req.params.id, updates, {
@@ -73,14 +79,14 @@ router.put("/:id", verifyToken, upload.single("avatar"), async (req, res) => {
     if (err.code === 11000) {
       return res.status(400).json({ message: "Email already exists" });
     }
-    res.status(500).json({ message: "Server error", error: err });
+    res.status(500).json({ message: "Server error", error: err.message });
   }
 });
 
 // PUT update user password
 router.put("/:id/password", verifyToken, async (req, res) => {
   try {
-    if (req.user.user.id !== req.params.id) {
+    if (req.user.id !== req.params.id) {
       return res.status(403).json({ message: "Access denied" });
     }
     const user = await User.findById(req.params.id);
@@ -89,6 +95,12 @@ router.put("/:id/password", verifyToken, async (req, res) => {
     }
 
     const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res
+        .status(400)
+        .json({ message: "Current and new passwords are required" });
+    }
+
     const isMatch = await Utils.verifyPassword(currentPassword, user.password);
     if (!isMatch) {
       return res.status(401).json({ message: "Current password is incorrect" });
@@ -98,7 +110,7 @@ router.put("/:id/password", verifyToken, async (req, res) => {
     await user.save();
     res.json({ message: "Password updated" });
   } catch (err) {
-    res.status(500).json({ message: "Server error", error: err });
+    res.status(500).json({ message: "Server error", error: err.message });
   }
 });
 
@@ -106,6 +118,13 @@ router.put("/:id/password", verifyToken, async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     const { firstName, lastName, email, password, accessLevel } = req.body;
+    if (!firstName || !lastName || !email || !password || !accessLevel) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
+    if (![1, 2].includes(parseInt(accessLevel))) {
+      return res.status(400).json({ message: "Invalid access level" });
+    }
+
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ message: "Email already exists" });
@@ -137,7 +156,7 @@ router.post("/", async (req, res) => {
       .status(201)
       .json({ message: "User created", user: userObject, accessToken });
   } catch (err) {
-    res.status(500).json({ message: "Server error", error: err });
+    res.status(500).json({ message: "Server error", error: err.message });
   }
 });
 

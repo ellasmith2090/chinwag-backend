@@ -1,8 +1,7 @@
-// Models - User.js--------------------------------------------------
-// Dependencies------------------------------------------------------
+// Models - User.js
+
 const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
-require("mongoose-type-email");
 const Utils = require("../Utils");
 
 const userSchema = new mongoose.Schema(
@@ -16,9 +15,10 @@ const userSchema = new mongoose.Schema(
       required: true,
     },
     email: {
-      type: mongoose.SchemaTypes.Email,
+      type: String,
       required: true,
       unique: true,
+      match: [/^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/, "Invalid email format"],
     },
     accessLevel: {
       type: Number,
@@ -30,13 +30,9 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    bio: {
-      type: String,
-      default: "",
-    },
     avatar: {
       type: String,
-      default: "/images/default-avatar.png", // Static default image
+      default: "/images/default-avatar.png",
     },
     isFirstLogin: {
       type: Boolean,

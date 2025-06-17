@@ -32,7 +32,6 @@ const bookingSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Ensure indexes for efficient queries
 bookingSchema.index({ event: 1, guest: 1 }, { unique: true });
 
 module.exports = mongoose.model("Booking", bookingSchema);

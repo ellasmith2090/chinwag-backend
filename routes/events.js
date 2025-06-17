@@ -6,7 +6,6 @@ const Event = require("../models/Event");
 const verifyToken = require("../middleware/verifyToken");
 const multer = require("multer");
 const sharp = require("sharp");
-const path = require("path");
 
 console.log("[Loaded] /routes/events.js");
 
@@ -49,7 +48,9 @@ router.get("/", async (req, res) => {
     );
     res.json(events);
   } catch (err) {
-    res.status(500).json({ message: "Problem getting events", error: err });
+    res
+      .status(500)
+      .json({ message: "Problem getting events", error: err.message });
   }
 });
 
@@ -65,24 +66,31 @@ router.get("/:id", async (req, res) => {
     }
     res.json(event);
   } catch (err) {
-    res.status(500).json({ message: "Problem getting event", error: err });
+    res
+      .status(500)
+      .json({ message: "Problem getting event", error: err.message });
   }
 });
 
 // POST create event
 router.post("/", verifyToken, upload.single("image"), async (req, res) => {
-  if (req.user.user.accessLevel !== 2) {
+  if (req.user.accessLevel !== 2) {
     return res.status(403).json({ message: "Access denied" });
+  }
+
+  const { title, description, date, location, seatsAvailable } = req.body;
+  if (!title || !description || !date || !location || !seatsAvailable) {
+    return res.status(400).json({ message: "All fields are required" });
   }
 
   try {
     const eventData = {
-      title: req.body.title,
-      description: req.body.description,
-      date: req.body.date,
-      location: req.body.location,
-      host: req.user.user.id,
-      seatsAvailable: parseInt(req.body.seatsAvailable),
+      title,
+      description,
+      date,
+      location,
+      host: req.user.id,
+      seatsAvailable: parseInt(seatsAvailable),
     };
 
     if (req.file) {
@@ -98,14 +106,21 @@ router.post("/", verifyToken, upload.single("image"), async (req, res) => {
     const savedEvent = await newEvent.save();
     res.status(201).json(savedEvent);
   } catch (err) {
-    res.status(500).json({ message: "Problem creating event", error: err });
+    res
+      .status(500)
+      .json({ message: "Problem creating event", error: err.message });
   }
 });
 
 // PUT update event
 router.put("/:id", verifyToken, upload.single("image"), async (req, res) => {
-  if (req.user.user.accessLevel !== 2) {
+  if (req.user.accessLevel !== 2) {
     return res.status(403).json({ message: "Access denied" });
+  }
+
+  const { title, description, date, location, seatsAvailable } = req.body;
+  if (!title || !description || !date || !location || !seatsAvailable) {
+    return res.status(400).json({ message: "All fields are required" });
   }
 
   try {
@@ -113,16 +128,16 @@ router.put("/:id", verifyToken, upload.single("image"), async (req, res) => {
     if (!event) {
       return res.status(404).json({ message: "Event not found" });
     }
-    if (event.host.toString() !== req.user.user.id) {
+    if (event.host.toString() !== req.user.id) {
       return res.status(403).json({ message: "Access denied" });
     }
 
     const updates = {
-      title: req.body.title,
-      description: req.body.description,
-      date: req.body.date,
-      location: req.body.location,
-      seatsAvailable: parseInt(req.body.seatsAvailable),
+      title,
+      description,
+      date,
+      location,
+      seatsAvailable: parseInt(seatsAvailable),
     };
 
     if (req.file) {
@@ -139,13 +154,15 @@ router.put("/:id", verifyToken, upload.single("image"), async (req, res) => {
     });
     res.json(updatedEvent);
   } catch (err) {
-    res.status(500).json({ message: "Problem updating event", error: err });
+    res
+      .status(500)
+      .json({ message: "Problem updating event", error: err.message });
   }
 });
 
 // DELETE event
 router.delete("/:id", verifyToken, async (req, res) => {
-  if (req.user.user.accessLevel !== 2) {
+  if (req.user.accessLevel !== 2) {
     return res.status(403).json({ message: "Access denied" });
   }
 
@@ -154,13 +171,15 @@ router.delete("/:id", verifyToken, async (req, res) => {
     if (!event) {
       return res.status(404).json({ message: "Event not found" });
     }
-    if (event.host.toString() !== req.user.user.id) {
+    if (event.host.toString() !== req.user.id) {
       return res.status(403).json({ message: "Access denied" });
     }
     await Event.findByIdAndDelete(req.params.id);
     res.json({ message: "Event deleted" });
   } catch (err) {
-    res.status(500).json({ message: "Problem deleting event", error: err });
+    res
+      .status(500)
+      .json({ message: "Problem deleting event", error: err.message });
   }
 });
 
