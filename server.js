@@ -9,7 +9,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 const corsOptions = {
-  origin: ["https://chinwag-frontend.netlify.app"],
+  origin: "*", // Temporary for testing
   credentials: true,
 };
 app.use(cors(corsOptions));
