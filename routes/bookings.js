@@ -6,6 +6,8 @@ const Booking = require("../models/Booking");
 const Event = require("../models/Event");
 const verifyToken = require("../middleware/verifyToken");
 
+console.log("[Loaded] /routes/bookings.js");
+
 // POST create booking
 router.post("/", verifyToken, async (req, res) => {
   if (req.user.user.accessLevel !== 1) {
