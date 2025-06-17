@@ -13,14 +13,14 @@ class Utils {
   }
 
   generateAccessToken(user) {
-    return jwt.sign({ user }, process.env.ACCESS_TOKEN_SECRET, {
+    return jwt.sign({ user }, process.env.JWT_SECRET, {
       expiresIn: "30m",
     });
   }
 
   verifyToken(token) {
     try {
-      return jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+      return jwt.verify(token, process.env.JWT_SECRET);
     } catch (error) {
       return null;
     }
