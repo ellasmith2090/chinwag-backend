@@ -1,5 +1,4 @@
 // routes/users.js
-
 const express = require("express");
 const router = express.Router();
 const User = require("../models/User");
@@ -62,6 +61,10 @@ router.put("/:id", verifyToken, upload.single("avatar"), async (req, res) => {
       updates.avatar = `/uploads/${req.file.filename}`;
     }
 
+    if (req.body.password) {
+      updates.password = await Utils.hashPassword(req.body.password);
+    }
+
     const updatedUser = await User.findByIdAndUpdate(req.params.id, updates, {
       new: true,
     }).select("-password");
@@ -86,12 +89,12 @@ router.put("/:id/password", verifyToken, async (req, res) => {
     }
 
     const { currentPassword, newPassword } = req.body;
-    const isMatch = await Utils.comparePassword(currentPassword, user.password);
+    const isMatch = await Utils.verifyPassword(currentPassword, user.password);
     if (!isMatch) {
       return res.status(401).json({ message: "Current password is incorrect" });
     }
 
-    user.password = newPassword;
+    user.password = await Utils.hashPassword(newPassword);
     await user.save();
     res.json({ message: "Password updated" });
   } catch (err) {
@@ -108,17 +111,31 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ message: "Email already exists" });
     }
 
+    const hashedPassword = await Utils.hashPassword(password);
     const user = new User({
       firstName,
       lastName,
       email,
-      password,
+      password: hashedPassword,
       accessLevel: parseInt(accessLevel),
       isFirstLogin: true,
     });
 
     await user.save();
-    res.status(201).json({ message: "User created" });
+
+    const userObject = {
+      id: user._id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      accessLevel: user.accessLevel,
+      isFirstLogin: user.isFirstLogin,
+    };
+    const accessToken = Utils.generateAccessToken(userObject);
+
+    res
+      .status(201)
+      .json({ message: "User created", user: userObject, accessToken });
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err });
   }
