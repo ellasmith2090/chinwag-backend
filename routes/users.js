@@ -1,5 +1,4 @@
 // routes/users.js
-
 const express = require("express");
 const router = express.Router();
 const User = require("../models/User");
@@ -20,43 +19,37 @@ router.get("/:id", verifyToken, async (req, res) => {
     if (req.user.id !== req.params.id) {
       return res.status(403).json({ message: "Access denied" });
     }
+
     const user = await User.findById(req.params.id).select("-password");
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
+    if (!user) return res.status(404).json({ message: "User not found" });
+
     res.json(user);
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });
   }
 });
 
-// PUT update user profile
+// PUT update user profile (partial support)
 router.put("/:id", verifyToken, upload.single("avatar"), async (req, res) => {
   try {
     if (req.user.id !== req.params.id) {
       return res.status(403).json({ message: "Access denied" });
     }
+
     const user = await User.findById(req.params.id);
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
+    if (!user) return res.status(404).json({ message: "User not found" });
 
-    const { firstName, lastName, email, password } = req.body;
-    if (!firstName || !lastName || !email) {
-      return res
-        .status(400)
-        .json({ message: "First name, last name, and email are required" });
-    }
+    const updates = {};
 
-    const updates = {
-      firstName: firstName || user.firstName,
-      lastName: lastName || user.lastName,
-      email: email || user.email,
-      isFirstLogin:
-        req.body.isFirstLogin !== undefined
-          ? req.body.isFirstLogin
-          : user.isFirstLogin,
-    };
+    if (req.body.firstName) updates.firstName = req.body.firstName;
+    if (req.body.lastName) updates.lastName = req.body.lastName;
+    if (req.body.email) updates.email = req.body.email;
+    if (typeof req.body.isFirstLogin !== "undefined")
+      updates.isFirstLogin = req.body.isFirstLogin;
+
+    if (req.body.password) {
+      updates.password = await Utils.hashPassword(req.body.password);
+    }
 
     if (req.file) {
       const buffer = await sharp(req.file.path)
@@ -67,13 +60,10 @@ router.put("/:id", verifyToken, upload.single("avatar"), async (req, res) => {
       updates.avatar = `/uploads/${req.file.filename}`;
     }
 
-    if (password) {
-      updates.password = await Utils.hashPassword(password);
-    }
-
     const updatedUser = await User.findByIdAndUpdate(req.params.id, updates, {
       new: true,
     }).select("-password");
+
     res.json(updatedUser);
   } catch (err) {
     if (err.code === 11000) {
@@ -89,10 +79,9 @@ router.put("/:id/password", verifyToken, async (req, res) => {
     if (req.user.id !== req.params.id) {
       return res.status(403).json({ message: "Access denied" });
     }
+
     const user = await User.findById(req.params.id);
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
+    if (!user) return res.status(404).json({ message: "User not found" });
 
     const { currentPassword, newPassword } = req.body;
     if (!currentPassword || !newPassword) {
@@ -108,19 +97,22 @@ router.put("/:id/password", verifyToken, async (req, res) => {
 
     user.password = await Utils.hashPassword(newPassword);
     await user.save();
+
     res.json({ message: "Password updated" });
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });
   }
 });
 
-// POST create user (for SignUp)
+// POST create user (SignUp)
 router.post("/", async (req, res) => {
   try {
     const { firstName, lastName, email, password, accessLevel } = req.body;
+
     if (!firstName || !lastName || !email || !password || !accessLevel) {
       return res.status(400).json({ message: "All fields are required" });
     }
+
     if (![1, 2].includes(parseInt(accessLevel))) {
       return res.status(400).json({ message: "Invalid access level" });
     }
