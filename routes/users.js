@@ -1,24 +1,34 @@
 // routes/users.js
+
 const express = require("express");
 const router = express.Router();
-const User = require("../models/User");
-const verifyToken = require("../middleware/verifyToken");
+const fs = require("fs");
+const path = require("path");
 const multer = require("multer");
 const sharp = require("sharp");
+const verifyToken = require("../middleware/verifyToken");
+const User = require("../models/User");
 const Utils = require("../Utils");
 
+// Ensure upload directory exists
+const uploadDir = path.join(__dirname, "../public/uploads");
+fs.mkdirSync(uploadDir, { recursive: true });
+
+// Set up Multer storage
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, "public/uploads/"),
+  destination: (req, file, cb) => cb(null, uploadDir),
   filename: (req, file, cb) => cb(null, `avatar-${Date.now()}.png`),
 });
+
 const upload = multer({ storage });
 
+// ==================================
 // GET user profile
+// ==================================
 router.get("/:id", verifyToken, async (req, res) => {
   try {
-    if (req.user.id !== req.params.id) {
+    if (req.user.id !== req.params.id)
       return res.status(403).json({ message: "Access denied" });
-    }
 
     const user = await User.findById(req.params.id).select("-password");
     if (!user) return res.status(404).json({ message: "User not found" });
@@ -29,12 +39,13 @@ router.get("/:id", verifyToken, async (req, res) => {
   }
 });
 
-// PUT update user profile (partial support)
+// ==================================
+// PUT update user profile (partial update)
+// ==================================
 router.put("/:id", verifyToken, upload.single("avatar"), async (req, res) => {
   try {
-    if (req.user.id !== req.params.id) {
+    if (req.user.id !== req.params.id)
       return res.status(403).json({ message: "Access denied" });
-    }
 
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: "User not found" });
@@ -44,6 +55,7 @@ router.put("/:id", verifyToken, upload.single("avatar"), async (req, res) => {
     if (req.body.firstName) updates.firstName = req.body.firstName;
     if (req.body.lastName) updates.lastName = req.body.lastName;
     if (req.body.email) updates.email = req.body.email;
+    if (req.body.bio) updates.bio = req.body.bio;
     if (typeof req.body.isFirstLogin !== "undefined")
       updates.isFirstLogin = req.body.isFirstLogin;
 
@@ -52,11 +64,12 @@ router.put("/:id", verifyToken, upload.single("avatar"), async (req, res) => {
     }
 
     if (req.file) {
+      const resizedPath = path.join(uploadDir, req.file.filename);
       const buffer = await sharp(req.file.path)
         .resize(200, 200)
         .png()
         .toBuffer();
-      await sharp(buffer).toFile(req.file.path);
+      await sharp(buffer).toFile(resizedPath);
       updates.avatar = `/uploads/${req.file.filename}`;
     }
 
@@ -73,12 +86,13 @@ router.put("/:id", verifyToken, upload.single("avatar"), async (req, res) => {
   }
 });
 
-// PUT update user password
+// ==================================
+// PUT update password
+// ==================================
 router.put("/:id/password", verifyToken, async (req, res) => {
   try {
-    if (req.user.id !== req.params.id) {
+    if (req.user.id !== req.params.id)
       return res.status(403).json({ message: "Access denied" });
-    }
 
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: "User not found" });
@@ -104,11 +118,12 @@ router.put("/:id/password", verifyToken, async (req, res) => {
   }
 });
 
-// POST create user (SignUp)
+// ==================================
+// POST signup
+// ==================================
 router.post("/", async (req, res) => {
   try {
     const { firstName, lastName, email, password, accessLevel } = req.body;
-
     if (!firstName || !lastName || !email || !password || !accessLevel) {
       return res.status(400).json({ message: "All fields are required" });
     }
@@ -142,8 +157,8 @@ router.post("/", async (req, res) => {
       accessLevel: user.accessLevel,
       isFirstLogin: user.isFirstLogin,
     };
-    const accessToken = Utils.generateAccessToken(userObject);
 
+    const accessToken = Utils.generateAccessToken(userObject);
     res
       .status(201)
       .json({ message: "User created", user: userObject, accessToken });
