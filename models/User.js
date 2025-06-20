@@ -13,11 +13,11 @@ const userSchema = new mongoose.Schema(
       unique: true,
       match: [/^[\w\-\.]+@([\w\-]+\.)+[\w\-]{2,4}$/, "Invalid email format"],
     },
-    role: {
-      type: String,
+    accessLevel: {
+      type: Number,
       required: true,
-      enum: ["guest", "host"],
-      default: "guest",
+      enum: [1, 2], // 1: guest, 2: host
+      default: 1,
     },
     password: { type: String, required: true },
     avatar: { type: String, default: "/images/defaultavatar.jpg" },

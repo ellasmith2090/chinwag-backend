@@ -1,168 +1,82 @@
 // routes/users.js
 
 const express = require("express");
-const router = express.Router();
-const fs = require("fs");
-const path = require("path");
-const multer = require("multer");
-const sharp = require("sharp");
-const verifyToken = require("../middleware/verifyToken");
+const jwt = require("jsonwebtoken");
 const User = require("../models/User");
-const Utils = require("../Utils");
+const { upload, resizeImage } = require("../middleware/upload");
+const router = express.Router();
 
-// Ensure upload directory exists
-const uploadDir = path.join(__dirname, "../public/uploads");
-fs.mkdirSync(uploadDir, { recursive: true });
-
-// Set up Multer storage
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadDir),
-  filename: (req, file, cb) => cb(null, `avatar-${Date.now()}.png`),
-});
-
-const upload = multer({ storage });
-
-// GET user profile
-router.get("/:id", verifyToken, async (req, res) => {
+const authenticate = async (req, res, next) => {
   try {
-    if (req.user.id !== req.params.id)
-      return res.status(403).json({ message: "Access denied" });
-
-    const user = await User.findById(req.params.id).select("-password");
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    res.json(user);
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) {
+      return res.status(401).json({ message: "No token provided" });
+    }
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = await User.findById(decoded.id).select("-password");
+    if (!req.user) {
+      return res.status(401).json({ message: "Invalid token" });
+    }
+    next();
   } catch (err) {
-    res.status(500).json({ message: "Server error", error: err.message });
+    console.error("[users.js] Auth error:", err);
+    res.status(401).json({ message: "Invalid token" });
   }
-});
+};
 
-// PUT update user profile
-router.put("/:id", verifyToken, upload.single("avatar"), async (req, res) => {
+router.get("/:id", authenticate, async (req, res) => {
   try {
-    if (req.user.id !== req.params.id)
-      return res.status(403).json({ message: "Access denied" });
-
-    const user = await User.findById(req.params.id);
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    const updates = {};
-    if (req.body.firstName) updates.firstName = req.body.firstName;
-    if (req.body.lastName) updates.lastName = req.body.lastName;
-    if (req.body.email) updates.email = req.body.email;
-    if (typeof req.body.isFirstLogin !== "undefined")
-      updates.isFirstLogin = req.body.isFirstLogin;
-
-    if (req.body.password) {
-      updates.password = await Utils.hashPassword(req.body.password);
+    if (req.user._id.toString() !== req.params.id) {
+      return res.status(403).json({ message: "Unauthorized" });
     }
-
-    let tempFilePath = null;
-    if (req.file) {
-      tempFilePath = req.file.path;
-      const resizedPath = path.join(uploadDir, req.file.filename);
-      const buffer = await sharp(req.file.path)
-        .resize(200, 200)
-        .png()
-        .toBuffer();
-      await sharp(buffer).toFile(resizedPath);
-      updates.avatar = `/uploads/${req.file.filename}`;
-    }
-
-    const updatedUser = await User.findByIdAndUpdate(req.params.id, updates, {
-      new: true,
-    }).select("-password");
-
-    res.json(updatedUser);
-  } catch (err) {
-    if (req.file && req.file.path) {
-      fs.unlink(req.file.path, (unlinkErr) => {
-        if (unlinkErr)
-          console.error("[users.js] Failed to delete temp file:", unlinkErr);
-      });
-    }
-    if (err.code === 11000) {
-      return res.status(400).json({ message: "Email already exists" });
-    }
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
-});
-
-// PUT update password
-router.put("/:id/password", verifyToken, async (req, res) => {
-  try {
-    if (req.user.id !== req.params.id)
-      return res.status(403).json({ message: "Access denied" });
-
-    const user = await User.findById(req.params.id);
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    const { currentPassword, newPassword } = req.body;
-    if (!currentPassword || !newPassword) {
-      return res
-        .status(400)
-        .json({ message: "Current and new passwords are required" });
-    }
-
-    const isMatch = await Utils.verifyPassword(currentPassword, user.password);
-    if (!isMatch) {
-      return res.status(401).json({ message: "Current password is incorrect" });
-    }
-
-    user.password = await Utils.hashPassword(newPassword);
-    await user.save();
-
-    res.json({ message: "Password updated" });
-  } catch (err) {
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
-});
-
-// POST signup
-router.post("/", async (req, res) => {
-  try {
-    const { firstName, lastName, email, password, accessLevel } = req.body;
-    if (!firstName || !lastName || !email || !password || !accessLevel) {
-      return res.status(400).json({ message: "All fields are required" });
-    }
-
-    if (![1, 2].includes(parseInt(accessLevel))) {
-      return res.status(400).json({ message: "Invalid access level" });
-    }
-
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ message: "Email already exists" });
-    }
-
-    const hashedPassword = await Utils.hashPassword(password);
-    const user = new User({
-      firstName,
-      lastName,
-      email,
-      password: hashedPassword,
-      accessLevel: parseInt(accessLevel),
-      isFirstLogin: true,
+    res.status(200).json({
+      id: req.user._id,
+      firstName: req.user.firstName,
+      lastName: req.user.lastName,
+      email: req.user.email,
+      accessLevel: req.user.accessLevel,
+      avatar: req.user.avatar,
     });
-
-    await user.save();
-
-    const userObject = {
-      id: user._id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email,
-      accessLevel: user.accessLevel,
-      isFirstLogin: user.isFirstLogin,
-    };
-
-    const accessToken = Utils.generateAccessToken(userObject);
-    res
-      .status(201)
-      .json({ message: "User created", user: userObject, accessToken });
   } catch (err) {
-    res.status(500).json({ message: "Server error", error: err.message });
+    console.error("[users.js] Get user error:", err);
+    res.status(500).json({ message: "Server error" });
   }
 });
+
+router.put(
+  "/:id",
+  authenticate,
+  upload.single("avatar"),
+  resizeImage,
+  async (req, res) => {
+    try {
+      if (req.user._id.toString() !== req.params.id) {
+        return res.status(403).json({ message: "Unauthorized" });
+      }
+      const { firstName, lastName, email, password } = req.body;
+      const updates = {};
+      if (firstName) updates.firstName = firstName;
+      if (lastName) updates.lastName = lastName;
+      if (email) updates.email = email;
+      if (password) updates.password = password;
+      if (req.file) updates.avatar = `/uploads/avatar/${req.file.filename}`;
+      const user = await User.findByIdAndUpdate(req.params.id, updates, {
+        new: true,
+        runValidators: true,
+      }).select("-password");
+      res.status(200).json({
+        id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        accessLevel: user.accessLevel,
+        avatar: user.avatar,
+      });
+    } catch (err) {
+      console.error("[users.js] Update user error:", err);
+      res.status(500).json({ message: "Server error" });
+    }
+  }
+);
 
 module.exports = router;
