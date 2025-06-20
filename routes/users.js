@@ -22,9 +22,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
-// ==================================
 // GET user profile
-// ==================================
 router.get("/:id", verifyToken, async (req, res) => {
   try {
     if (req.user.id !== req.params.id)
@@ -39,9 +37,7 @@ router.get("/:id", verifyToken, async (req, res) => {
   }
 });
 
-// ==================================
-// PUT update user profile (partial update)
-// ==================================
+// PUT update user profile
 router.put("/:id", verifyToken, upload.single("avatar"), async (req, res) => {
   try {
     if (req.user.id !== req.params.id)
@@ -51,11 +47,9 @@ router.put("/:id", verifyToken, upload.single("avatar"), async (req, res) => {
     if (!user) return res.status(404).json({ message: "User not found" });
 
     const updates = {};
-
     if (req.body.firstName) updates.firstName = req.body.firstName;
     if (req.body.lastName) updates.lastName = req.body.lastName;
     if (req.body.email) updates.email = req.body.email;
-    if (req.body.bio) updates.bio = req.body.bio;
     if (typeof req.body.isFirstLogin !== "undefined")
       updates.isFirstLogin = req.body.isFirstLogin;
 
@@ -63,7 +57,9 @@ router.put("/:id", verifyToken, upload.single("avatar"), async (req, res) => {
       updates.password = await Utils.hashPassword(req.body.password);
     }
 
+    let tempFilePath = null;
     if (req.file) {
+      tempFilePath = req.file.path;
       const resizedPath = path.join(uploadDir, req.file.filename);
       const buffer = await sharp(req.file.path)
         .resize(200, 200)
@@ -79,6 +75,12 @@ router.put("/:id", verifyToken, upload.single("avatar"), async (req, res) => {
 
     res.json(updatedUser);
   } catch (err) {
+    if (req.file && req.file.path) {
+      fs.unlink(req.file.path, (unlinkErr) => {
+        if (unlinkErr)
+          console.error("[users.js] Failed to delete temp file:", unlinkErr);
+      });
+    }
     if (err.code === 11000) {
       return res.status(400).json({ message: "Email already exists" });
     }
@@ -86,9 +88,7 @@ router.put("/:id", verifyToken, upload.single("avatar"), async (req, res) => {
   }
 });
 
-// ==================================
 // PUT update password
-// ==================================
 router.put("/:id/password", verifyToken, async (req, res) => {
   try {
     if (req.user.id !== req.params.id)
@@ -118,9 +118,7 @@ router.put("/:id/password", verifyToken, async (req, res) => {
   }
 });
 
-// ==================================
 // POST signup
-// ==================================
 router.post("/", async (req, res) => {
   try {
     const { firstName, lastName, email, password, accessLevel } = req.body;

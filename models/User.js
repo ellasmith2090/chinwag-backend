@@ -1,43 +1,27 @@
 // Models - User.js
 
 const mongoose = require("mongoose");
-const Schema = mongoose.Schema;
 const Utils = require("../Utils");
 
 const userSchema = new mongoose.Schema(
   {
-    firstName: {
-      type: String,
-      required: true,
-    },
-    lastName: {
-      type: String,
-      required: true,
-    },
+    firstName: { type: String, required: true, trim: true },
+    lastName: { type: String, required: true, trim: true },
     email: {
       type: String,
       required: true,
       unique: true,
-      match: [/^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/, "Invalid email format"],
+      match: [/^[\w\-\.]+@([\w\-]+\.)+[\w\-]{2,4}$/, "Invalid email format"],
     },
-    accessLevel: {
-      type: Number,
-      required: true,
-      enum: [1, 2],
-      default: 1,
-    },
-    password: {
+    role: {
       type: String,
       required: true,
+      enum: ["guest", "host"],
+      default: "guest",
     },
-    avatar: {
-      type: String,
-      default: "/images/default-avatar.png",
-    },
-    isFirstLogin: {
-      type: Boolean,
-      default: true,
-    },
+    password: { type: String, required: true },
+    avatar: { type: String, default: "/images/defaultavatar.jpg" },
+    isFirstLogin: { type: Boolean, default: true },
   },
   { timestamps: true }
 );
