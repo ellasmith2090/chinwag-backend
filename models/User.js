@@ -1,7 +1,6 @@
-// Models - User.js
-
+// backend/models/User.js
 const mongoose = require("mongoose");
-const Utils = require("../Utils");
+const AuthUtils = require("./AuthUtils");
 
 const userSchema = new mongoose.Schema(
   {
@@ -11,7 +10,10 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
       unique: true,
-      match: [/^[\w\-\.]+@([\w\-]+\.)+[\w\-]{2,4}$/, "Invalid email format"],
+      match: [
+        /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/,
+        "Invalid email format",
+      ],
     },
     accessLevel: {
       type: Number,
@@ -20,7 +22,7 @@ const userSchema = new mongoose.Schema(
       default: 1,
     },
     password: { type: String, required: true },
-    avatar: { type: String, default: "/images/defaultavatar.jpg" },
+    avatar: { type: String, default: "/uploads/avatar/defaultavatar.jpg" },
     isFirstLogin: { type: Boolean, default: true },
   },
   { timestamps: true }
@@ -28,9 +30,37 @@ const userSchema = new mongoose.Schema(
 
 userSchema.pre("save", async function (next) {
   if (this.isModified("password")) {
-    this.password = await Utils.hashPassword(this.password);
+    try {
+      this.password = await AuthUtils.hashPassword(this.password);
+    } catch (err) {
+      return next(err);
+    }
   }
   next();
 });
+
+userSchema.pre(["findOneAndUpdate"], async function (next) {
+  const update = this.getUpdate();
+  if (update.password) {
+    try {
+      update.password = await AuthUtils.hashPassword(update.password);
+    } catch (err) {
+      return next(err);
+    }
+  }
+  next();
+});
+
+userSchema.methods.comparePassword = async function (password) {
+  try {
+    return await AuthUtils.verifyPassword(password, this.password);
+  } catch (err) {
+    throw new Error(
+      `Password verification failed: ${
+        process.env.NODE_ENV === "development" ? err.message : ""
+      }`
+    );
+  }
+};
 
 module.exports = mongoose.model("User", userSchema);

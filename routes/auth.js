@@ -1,105 +1,122 @@
-// Routes - auth.js
-
+// routes/auth.js
 const express = require("express");
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
-const User = require("../models/User");
 const router = express.Router();
+const { body, validationResult } = require("express-validator");
+const User = require("../models/User");
+const AuthUtils = require("./AuthUtils");
+const verifyToken = require("../middleware/verifyToken");
 
-router.post("/signup", async (req, res) => {
-  try {
-    const { firstName, lastName, email, password, accessLevel } = req.body;
-    if (!firstName || !lastName || !email || !password || !accessLevel) {
-      return res.status(400).json({ message: "All fields are required" });
+router.post(
+  "/signup",
+  [
+    body("firstName").trim().notEmpty().withMessage("First name is required"),
+    body("lastName").trim().notEmpty().withMessage("Last name is required"),
+    body("email")
+      .isEmail()
+      .normalizeEmail()
+      .withMessage("Invalid email format"),
+    body("password")
+      .isLength({ min: 6 })
+      .withMessage("Password must be at least 6 characters"),
+    body("accessLevel").isIn([1, 2]).withMessage("Invalid access level"),
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
     }
-    if (![1, 2].includes(Number(accessLevel))) {
-      return res.status(400).json({ message: "Invalid access level" });
+    try {
+      const { firstName, lastName, email, password, accessLevel } = req.body;
+      const existingUser = await User.findOne({ email });
+      if (existingUser) {
+        return res.status(400).json({ message: "Email already exists" });
+      }
+      const user = new User({
+        firstName,
+        lastName,
+        email,
+        password,
+        accessLevel: Number(accessLevel),
+      });
+      await user.save();
+      const accessToken = AuthUtils.generateAccessToken(user);
+      return res.json({
+        accessToken,
+        user: {
+          _id: user._id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          accessLevel: user.accessLevel,
+          isFirstLogin: user.isFirstLogin,
+        },
+      });
+    } catch (err) {
+      console.error("[auth.js] Signup error:", err.message);
+      res.status(500).json({
+        message: `Server error: ${
+          process.env.NODE_ENV === "development" ? err.message : ""
+        }`,
+      });
     }
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ message: "Email already exists" });
-    }
-    const user = new User({
-      firstName,
-      lastName,
-      email,
-      password,
-      accessLevel: Number(accessLevel),
-    });
-    await user.save();
-    const token = jwt.sign(
-      { id: user._id, accessLevel: user.accessLevel },
-      process.env.JWT_SECRET,
-      { expiresIn: "1h" }
-    );
-    res.status(201).json({
-      accessToken: token,
-      user: {
-        id: user._id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        accessLevel: user.accessLevel,
-        isFirstLogin: user.isFirstLogin,
-      },
-    });
-  } catch (err) {
-    console.error("[auth.js] Signup error:", err);
-    res.status(500).json({ message: "Server error" });
   }
-});
+);
 
-router.post("/signin", async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    if (!email || !password) {
-      return res
-        .status(400)
-        .json({ message: "Email and password are required" });
+router.post(
+  "/signin",
+  [
+    body("email")
+      .isEmail()
+      .normalizeEmail()
+      .withMessage("Invalid email format"),
+    body("password").notEmpty().withMessage("Password is required"),
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
     }
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(401).json({ message: "Invalid credentials" });
+    try {
+      const { email, password } = req.body;
+      const user = await User.findOne({ email });
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      const isMatch = await user.comparePassword(password);
+      if (!isMatch) {
+        return res.status(401).json({ message: "Incorrect password" });
+      }
+      const accessToken = AuthUtils.generateAccessToken(user);
+      return res.json({
+        accessToken,
+        user: {
+          _id: user._id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          accessLevel: user.accessLevel,
+          isFirstLogin: user.isFirstLogin,
+        },
+      });
+    } catch (err) {
+      console.error("[auth.js] Signin error:", err.message);
+      res.status(500).json({
+        message: `Server error: ${
+          process.env.NODE_ENV === "development" ? err.message : ""
+        }`,
+      });
     }
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(401).json({ message: "Invalid credentials" });
-    }
-    const token = jwt.sign(
-      { id: user._id, accessLevel: user.accessLevel },
-      process.env.JWT_SECRET,
-      { expiresIn: "1h" }
-    );
-    res.status(200).json({
-      accessToken: token,
-      user: {
-        id: user._id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        accessLevel: user.accessLevel,
-        isFirstLogin: user.isFirstLogin,
-      },
-    });
-  } catch (err) {
-    console.error("[auth.js] Signin error:", err);
-    res.status(500).json({ message: "Server error" });
   }
-});
+);
 
-router.get("/validate", async (req, res) => {
+router.get("/validate", verifyToken, async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(" ")[1];
-    if (!token) {
-      return res.status(401).json({ message: "No token provided" });
-    }
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id).select("-password");
+    const user = await User.findById(req.user.id).select("-password");
     if (!user) {
-      return res.status(401).json({ message: "Invalid token" });
+      return res.status(401).json({ message: "User not found" });
     }
-    res.status(200).json({
-      id: user._id,
+    return res.json({
+      _id: user._id,
       firstName: user.firstName,
       lastName: user.lastName,
       email: user.email,
@@ -107,8 +124,12 @@ router.get("/validate", async (req, res) => {
       isFirstLogin: user.isFirstLogin,
     });
   } catch (err) {
-    console.error("[auth.js] Validate error:", err);
-    res.status(401).json({ message: "Invalid token" });
+    console.error("[auth.js] Validate error:", err.message);
+    res.status(401).json({
+      message: `Invalid token: ${
+        process.env.NODE_ENV === "development" ? err.message : ""
+      }`,
+    });
   }
 });
 

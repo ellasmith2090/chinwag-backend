@@ -5,11 +5,12 @@ const sharp = require("sharp");
 const path = require("path");
 const fs = require("fs").promises;
 
+// Middleware requires verifyToken to set req.user
 const ensureDir = async (dir) => {
   try {
     await fs.mkdir(dir, { recursive: true });
   } catch (err) {
-    console.error("[upload.js] Failed to create directory:", err);
+    console.error("[upload] Failed to create directory:", err.message);
     throw err;
   }
 };
@@ -18,7 +19,7 @@ const storage = multer.diskStorage({
   destination: async (req, file, cb) => {
     const dir = path.join(
       __dirname,
-      "../uploads",
+      "../public/uploads",
       req.fieldname === "avatar" ? "avatar" : "event"
     );
     await ensureDir(dir);
@@ -42,7 +43,7 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 2 * 1024 * 1024 },
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB limit
 });
 
 const handleMulterError = (err, req, res, next) => {
@@ -69,8 +70,12 @@ const resizeImage = async (req, res, next) => {
     await sharp(buffer).toFile(req.file.path);
     next();
   } catch (err) {
-    console.error("[upload.js] Image processing failed:", err);
-    res.status(500).json({ message: "Image processing failed" });
+    console.error("[upload] Image processing failed:", err.message);
+    res.status(500).json({
+      message: `Image processing failed: ${
+        process.env.NODE_ENV === "development" ? err.message : ""
+      }`,
+    });
   }
 };
 

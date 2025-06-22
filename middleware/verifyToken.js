@@ -1,6 +1,6 @@
-// middleware/verifyToken.js
+// backend/middleware/verifyToken.js
 
-const Utils = require("../Utils");
+const AuthUtils = require("./AuthUtils");
 
 module.exports = (req, res, next) => {
   const token = req.headers["authorization"]?.split(" ")[1];
@@ -8,11 +8,12 @@ module.exports = (req, res, next) => {
     return res.status(401).json({ message: "Authorization token is missing" });
   }
 
-  const tokenData = Utils.verifyToken(token);
-  if (!tokenData) {
+  const tokenData = AuthUtils.verifyToken(token);
+  if (!tokenData.valid) {
+    console.error("[verifyToken] Invalid token:", tokenData.error);
     return res.status(403).json({ message: "Invalid token" });
   }
 
-  req.user = tokenData;
+  req.user = tokenData.decoded;
   next();
 };
